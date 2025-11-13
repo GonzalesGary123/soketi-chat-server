@@ -10,13 +10,3 @@ restartPolicyMaxRetries = 10
 path = "/"
 timeout = 100
 interval = 10
-```
-
-## Also, let's verify your Soketi is actually listening
-
-Can you run this command in Railway's **Settings → Deploy Logs** and share the output:
-
-Look for these specific lines:
-```
-✅ Soketi WebSocket server is running!
-📡 Listening on: 0.0.0.0:8080
