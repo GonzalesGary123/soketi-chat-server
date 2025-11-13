@@ -3,6 +3,10 @@ const express = require('express');
 const Pusher = require('pusher');
 const cors = require('cors');
 
+// ===== ENVIRONMENT CONFIGURATION =====
+const IS_PRODUCTION = process.env.NODE_ENV === 'production';
+const PORT = process.env.PORT || 6001;
+
 // ===== SOKETI SERVER CONFIGURATION =====
 
 const apps = [
@@ -20,14 +24,13 @@ const apps = [
 ];
 
 const soketiOptions = {
-    debug: true,
+    debug: !IS_PRODUCTION,
     host: '0.0.0.0',
-    port: process.env.PORT || 6001,
+    port: PORT,
     'appManager.array.apps': apps,
     
-    // ✅ FIXED CORS Configuration
     cors: {
-        origin: ['*'],  // Correct property name
+        origin: ['*'],
         methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
         allowedHeaders: [
             'Origin',
@@ -48,9 +51,10 @@ const soketiServer = new Server(soketiOptions);
 
 soketiServer.start().then(() => {
     console.log('✅ Soketi WebSocket server is running!');
-    console.log(`📡 WebSocket: ws://localhost:${soketiOptions.port}`);
+    console.log(`📡 Port: ${PORT}`);
     console.log(`🔑 App Key: ${apps[0].key}`);
     console.log(`🆔 App ID: ${apps[0].id}`);
+    console.log(`🌍 Environment: ${IS_PRODUCTION ? 'Production' : 'Development'}`);
 }).catch((error) => {
     console.error('❌ Failed to start Soketi server:', error);
     process.exit(1);
@@ -68,15 +72,34 @@ const pusher = new Pusher({
     key: apps[0].key,
     secret: apps[0].secret,
     host: '127.0.0.1',
-    port: 6001,
+    port: PORT,
     useTLS: false
+});
+
+// Health check endpoint
+app.get('/', (req, res) => {
+    res.json({ 
+        status: 'ok',
+        service: 'Soketi Chat Server',
+        soketi: 'running',
+        backend: 'running',
+        port: PORT,
+        environment: IS_PRODUCTION ? 'production' : 'development'
+    });
 });
 
 // API endpoint to send messages
 app.post('/api/message', (req, res) => {
     const { text, timestamp, sender } = req.body;
     
-    console.log('📤 Broadcasting message:', text);
+    if (!text || !timestamp || !sender) {
+        return res.status(400).json({ 
+            success: false, 
+            error: 'Missing required fields: text, timestamp, sender' 
+        });
+    }
+    
+    console.log('📤 Broadcasting message from:', sender);
     
     // Broadcast message to all connected clients
     pusher.trigger('test-channel', 'new-message', {
@@ -94,19 +117,16 @@ app.post('/api/message', (req, res) => {
     });
 });
 
-// Health check endpoint
+// Health check endpoint (alternative)
 app.get('/api/health', (req, res) => {
     res.json({ 
         status: 'ok', 
         soketi: 'running',
-        backend: 'running'
+        backend: 'running',
+        timestamp: new Date().toISOString()
     });
 });
 
-// Start Express server
-const BACKEND_PORT = 3000;
-app.listen(BACKEND_PORT, () => {
-    console.log(`✅ Backend API server running on port ${BACKEND_PORT}`);
-    console.log(`🌐 API: http://localhost:${BACKEND_PORT}/api/message`);
-    console.log('\n🚀 Ready to test! Open test.html in your browser.\n');
-});
+console.log(`✅ Express server integrated with Soketi on port ${PORT}`);
+console.log(`🌐 API: http://localhost:${PORT}/api/message`);
+console.log('\n🚀 Ready! The server handles both WebSocket and HTTP on the same port.\n');
