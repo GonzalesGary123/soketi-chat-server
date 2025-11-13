@@ -71,9 +71,9 @@ const pusher = new Pusher({
     appId: apps[0].id,
     key: apps[0].key,
     secret: apps[0].secret,
-    host: '127.0.0.1',
-    port: PORT,
-    useTLS: false
+    host: process.env.PUSHER_HOST || '127.0.0.1',
+    port: parseInt(process.env.PUSHER_PORT) || PORT,
+    useTLS: process.env.PUSHER_USE_TLS === 'true'
 });
 
 // Health check endpoint
