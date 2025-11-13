@@ -1,20 +1,7 @@
 {
-  "name": "soketi-pusher",
-  "version": "1.0.0",
-  "description": "Soketi WebSocket Server with Backend Relay",
-  "main": "server.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "node server.js"
+    "start": "soketi start --config=soketi.config.json"
   },
-  "keywords": [
-    "soketi",
-    "websocket",
-    "real-time",
-    "pusher"
-  ],
-  "author": "Your Name",
-  "license": "MIT",
   "dependencies": {
     "@soketi/soketi": "^1.6.0",
     "cors": "^2.8.5",
