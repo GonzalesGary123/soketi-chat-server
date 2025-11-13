@@ -1,6 +1,5 @@
-const express = require('express');
-const cors = require('cors');
 const { Server } = require('@soketi/soketi');
+const Pusher = require('pusher');
 
 // Environment configuration
 const PORT = parseInt(process.env.PORT) || 6001;
@@ -25,7 +24,7 @@ const apps = [
     },
 ];
 
-// Initialize Soketi - it will create its own HTTP server
+// Soketi options with HTTP webhooks enabled
 const soketiOptions = {
     debug: !IS_PRODUCTION,
     host: '0.0.0.0',  // CRITICAL: Must be 0.0.0.0 for Railway
@@ -41,49 +40,34 @@ const soketiOptions = {
     'adapter.driver': 'local',
     'cache.driver': 'memory',
     'queue.driver': 'sync',
+    
+    // Enable HTTP API
+    'httpApi.enabled': true,
+    'httpApi.acceptTraffic.memoryThreshold': 85,
+    
+    // Enable metrics
     'metrics.enabled': true,
     'metrics.port': 9601,
+    
+    // HTTP server options
+    'httpApi.requestLimitInMb': 100,
+    'httpApi.acceptTraffic': {
+        memoryThreshold: 85,
+    },
 };
 
-// Start Soketi first
+// Start Soketi
 const soketiServer = new Server(soketiOptions);
 
 soketiServer.start().then(() => {
-    console.log('✅ Soketi WebSocket server initialized!');
+    console.log('✅ Soketi WebSocket server is running!');
+    console.log(`📡 Listening on: 0.0.0.0:${PORT}`);
     console.log(`🔑 App Key: ${apps[0].key}`);
     console.log(`🆔 App ID: ${apps[0].id}`);
+    console.log(`🌐 WebSocket URL: ws://0.0.0.0:${PORT}`);
+    console.log(`🔐 Production URL: wss://soketi-chat-server-production.up.railway.app`);
     
-    // Get Soketi's HTTP server instance
-    const httpServer = soketiServer.httpServer;
-    
-    // Create Express app and attach it to Soketi's server
-    const app = express();
-    app.use(cors());
-    app.use(express.json());
-
-    // Express routes
-    app.get('/', (req, res) => {
-        res.json({ 
-            status: 'ok',
-            service: 'Soketi Chat Server',
-            port: PORT,
-            host: '0.0.0.0',
-            environment: IS_PRODUCTION ? 'production' : 'development',
-            websocket: 'available',
-            timestamp: new Date().toISOString()
-        });
-    });
-
-    app.get('/api/health', (req, res) => {
-        res.json({ 
-            status: 'healthy',
-            uptime: process.uptime(),
-            timestamp: new Date().toISOString()
-        });
-    });
-
     // Initialize Pusher client for backend messaging
-    const Pusher = require('pusher');
     const pusher = new Pusher({
         appId: apps[0].id,
         key: apps[0].key,
@@ -93,47 +77,26 @@ soketiServer.start().then(() => {
         useTLS: false
     });
 
-    // Message relay endpoint
-    app.post('/api/message', (req, res) => {
-        const { text, timestamp, sender } = req.body;
-        
-        if (!text || !timestamp || !sender) {
-            return res.status(400).json({ 
-                success: false, 
-                error: 'Missing required fields: text, timestamp, sender' 
+    // Set up a simple interval to test broadcasting (optional - remove if not needed)
+    console.log('\n🚀 Server is ready!');
+    console.log('📨 You can now send messages via the Soketi HTTP API');
+    console.log(`📍 Endpoint: http://0.0.0.0:${PORT}/apps/${apps[0].id}/events`);
+    console.log('\n✨ Ready to handle WebSocket connections!\n');
+    
+    // Example: Broadcast a test message every 30 seconds (remove this in production)
+    if (!IS_PRODUCTION) {
+        setInterval(() => {
+            pusher.trigger('test-channel', 'server-ping', {
+                text: 'Server is alive!',
+                timestamp: new Date().toISOString(),
+                sender: 'System'
+            }).then(() => {
+                console.log('📡 Ping broadcast sent');
+            }).catch(err => {
+                console.error('❌ Ping broadcast failed:', err.message);
             });
-        }
-        
-        console.log('📤 Broadcasting message from:', sender);
-        
-        pusher.trigger('test-channel', 'new-message', {
-            text,
-            timestamp,
-            sender
-        })
-        .then(() => {
-            console.log('✅ Message broadcasted successfully');
-            res.json({ success: true });
-        })
-        .catch((error) => {
-            console.error('❌ Error broadcasting message:', error);
-            res.status(500).json({ success: false, error: error.message });
-        });
-    });
-
-    // Attach Express middleware to Soketi's HTTP server
-    // This allows Express routes to coexist with WebSocket connections
-    httpServer.on('request', (req, res) => {
-        // Only handle non-WebSocket HTTP requests with Express
-        if (!req.headers.upgrade) {
-            app(req, res);
-        }
-    });
-
-    console.log('🚀 Server is ready and listening!');
-    console.log(`📡 HTTP/WS Server: http://0.0.0.0:${PORT}`);
-    console.log(`🌐 API Endpoint: http://0.0.0.0:${PORT}/api/message`);
-    console.log('\n✨ Ready to handle WebSocket and HTTP requests!\n');
+        }, 30000);
+    }
 
 }).catch((error) => {
     console.error('❌ Failed to start Soketi server:', error);
@@ -144,10 +107,10 @@ soketiServer.start().then(() => {
 // Graceful shutdown
 process.on('SIGTERM', () => {
     console.log('⚠️ SIGTERM received, shutting down gracefully...');
-    if (soketiServer) {
-        soketiServer.stop().then(() => {
-            console.log('✅ Server closed');
-            process.exit(0);
-        });
-    }
+    process.exit(0);
+});
+
+process.on('SIGINT', () => {
+    console.log('⚠️ SIGINT received, shutting down gracefully...');
+    process.exit(0);
 });
