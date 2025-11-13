@@ -3,10 +3,16 @@ const Pusher = require('pusher');
 
 // Environment configuration
 const PORT = parseInt(process.env.PORT) || 6001;
+const HOST = process.env.HOST || process.env.SOKETI_HOST || '0.0.0.0';
 const IS_PRODUCTION = process.env.NODE_ENV === 'production';
+
+// CRITICAL: Force host binding for Railway
+process.env.HOST = HOST;
+process.env.SOKETI_HOST = HOST;
 
 console.log('🚀 Starting Soketi Chat Server...');
 console.log(`📍 Port: ${PORT}`);
+console.log(`🏠 Host: ${HOST}`);
 console.log(`🌍 Environment: ${IS_PRODUCTION ? 'Production' : 'Development'}`);
 
 // Soketi configuration
@@ -24,10 +30,10 @@ const apps = [
     },
 ];
 
-// Soketi options with HTTP webhooks enabled
+// Soketi options
 const soketiOptions = {
     debug: !IS_PRODUCTION,
-    host: '0.0.0.0',  // CRITICAL: Must be 0.0.0.0 for Railway
+    host: HOST,  // Use the forced HOST variable
     port: PORT,
     'appManager.array.apps': apps,
     
@@ -43,17 +49,10 @@ const soketiOptions = {
     
     // Enable HTTP API
     'httpApi.enabled': true,
-    'httpApi.acceptTraffic.memoryThreshold': 85,
     
     // Enable metrics
     'metrics.enabled': true,
     'metrics.port': 9601,
-    
-    // HTTP server options
-    'httpApi.requestLimitInMb': 100,
-    'httpApi.acceptTraffic': {
-        memoryThreshold: 85,
-    },
 };
 
 // Start Soketi
@@ -61,11 +60,10 @@ const soketiServer = new Server(soketiOptions);
 
 soketiServer.start().then(() => {
     console.log('✅ Soketi WebSocket server is running!');
-    console.log(`📡 Listening on: 0.0.0.0:${PORT}`);
+    console.log(`📡 Listening on: ${HOST}:${PORT}`);
     console.log(`🔑 App Key: ${apps[0].key}`);
     console.log(`🆔 App ID: ${apps[0].id}`);
-    console.log(`🌐 WebSocket URL: ws://0.0.0.0:${PORT}`);
-    console.log(`🔐 Production URL: wss://soketi-chat-server-production.up.railway.app`);
+    console.log(`🌐 WebSocket: ws${IS_PRODUCTION ? 's' : ''}://${HOST}:${PORT}`);
     
     // Initialize Pusher client for backend messaging
     const pusher = new Pusher({
@@ -77,23 +75,24 @@ soketiServer.start().then(() => {
         useTLS: false
     });
 
-    // Set up a simple interval to test broadcasting (optional - remove if not needed)
     console.log('\n🚀 Server is ready!');
-    console.log('📨 You can now send messages via the Soketi HTTP API');
-    console.log(`📍 Endpoint: http://0.0.0.0:${PORT}/apps/${apps[0].id}/events`);
+    console.log(`📨 You can broadcast messages using Pusher client`);
+    console.log(`📍 Soketi HTTP API: http://0.0.0.0:${PORT}/apps/${apps[0].id}/events`);
     console.log('\n✨ Ready to handle WebSocket connections!\n');
     
-    // Example: Broadcast a test message every 30 seconds (remove this in production)
+    // Optional: Send a test ping every 30 seconds (remove in production)
     if (!IS_PRODUCTION) {
+        let pingCount = 0;
         setInterval(() => {
+            pingCount++;
             pusher.trigger('test-channel', 'server-ping', {
-                text: 'Server is alive!',
+                text: `Server ping #${pingCount}`,
                 timestamp: new Date().toISOString(),
                 sender: 'System'
             }).then(() => {
-                console.log('📡 Ping broadcast sent');
+                console.log(`📡 Ping #${pingCount} sent to test-channel`);
             }).catch(err => {
-                console.error('❌ Ping broadcast failed:', err.message);
+                console.error('❌ Ping failed:', err.message);
             });
         }, 30000);
     }
